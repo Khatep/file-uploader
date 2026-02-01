@@ -12,6 +12,6 @@ public class UploadedFileDto {
     private String storedFileName;
     private long fileSize;
     private String fileType;
-    //private FileStorageType fileStorageType;
-    private String remotePath;
+    private String bucket;
+    private String storageKey;
 }

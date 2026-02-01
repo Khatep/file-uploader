@@ -22,19 +22,20 @@ import java.util.concurrent.Executor;
 public class FileService {
 
     private final FilesMetadataRepository filesMetadataRepository;
+    private final FileStorageService fileStorageService;
 
     private final Executor taskExecutor;
     private final ObjectProvider<FileService> selfProvider;
 
     public void createAndSave(FileRequestDto dto) {
-        String userId = userService.findByUsername(dto.getUserId());
+        //String userId = userService.findByUsername(dto.getUserId());
 
         try {
             // Сохраняем MultipartFile во временный файл
             File tempFile = TempFileUtils.saveTempFile(dto);
 
             CompletableFuture
-                    .supplyAsync(() -> nonameService.uploadDocument(tempFile), taskExecutor)
+                    .supplyAsync(() -> fileStorageService.upload(tempFile), taskExecutor)
                     .thenAccept(document -> selfProvider
                             .getObject()
                             .transactionalSave(document)
@@ -44,6 +45,7 @@ public class FileService {
                         //TODO: KAFKA FOR PUSH
                     })
                     .exceptionally(ex -> {
+                        TempFileUtils.deleteFile(tempFile);
                         log.error("Failed to process proof of address", ex);
                         //TODO: KAFKA for PUSH
                         return null;

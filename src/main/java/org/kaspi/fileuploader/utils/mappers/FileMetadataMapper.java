@@ -8,10 +8,11 @@ import org.kaspi.fileuploader.domain.models.FileMetadata;
 public class FileMetadataMapper {
     public static FileMetadata mapToEntity(UploadedFileDto uploadedDocumentDto) {
         return FileMetadata.builder()
-                .fileName(uploadedDocumentDto.getStoredFileName())
+                .fileName(uploadedDocumentDto.getOriginalFileName())
                 .fileSize(uploadedDocumentDto.getFileSize())
                 .fileType(uploadedDocumentDto.getFileType())
-                //.fileStorageType(uploadedDocumentDto.getFileStorageType())
+                .bucket(uploadedDocumentDto.getBucket())
+                .storageKey(uploadedDocumentDto.getStorageKey())
                 .build();
     }
 }

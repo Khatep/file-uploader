@@ -25,5 +25,11 @@ public class FileMetadata {
 
     @Column(name = "file_type")
     String fileType;
+
+    @Column(name = "bucket")
+    String bucket;
+
+    @Column(name = "storage_key")
+    String storageKey;
 }
 

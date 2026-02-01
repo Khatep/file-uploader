@@ -20,6 +20,7 @@ import java.time.Instant;
 public class FileController {
 
     private final FileService fileService;
+
     @PostMapping(value = "/upload", consumes = "multipart/form-data")
     public ResponseEntity<Void> uploadFile(@ModelAttribute FileRequestDto fileRequestDto) {
         Instant start = Instant.now();

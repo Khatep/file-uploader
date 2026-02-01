@@ -1,5 +1,6 @@
 package org.kaspi.fileuploader.services;
 
+import io.vavr.control.Try;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.kaspi.fileuploader.domain.dto.FileRequestDto;
@@ -36,10 +37,7 @@ public class FileService {
 
             CompletableFuture
                     .supplyAsync(() -> fileStorageService.upload(tempFile), taskExecutor)
-                    .thenAccept(document -> selfProvider
-                            .getObject()
-                            .transactionalSave(document)
-                    )
+                    .thenAccept(this::saveWithCompensation)
                     .whenComplete((res, ex) -> {
                         TempFileUtils.deleteFile(tempFile);
                         //TODO: KAFKA FOR PUSH
@@ -53,6 +51,15 @@ public class FileService {
         } catch (Exception e) {
             log.error("Failed to process proof of address", e);
         }
+    }
+
+    private void saveWithCompensation(UploadedFileDto document) {
+        Try.run(() -> selfProvider.getObject().transactionalSave(document))
+                .onFailure(ex -> {
+                    fileStorageService.delete(document.getStorageKey());
+                    log.error("DB save failed, file rolled back", ex);
+                })
+                .get();
     }
 
     @Transactional

@@ -28,19 +28,24 @@ public class MinioFileStorageService implements FileStorageService {
         try {
             // Генерируем уникальный ключ в storage
             String key = UUID.randomUUID() + "_" + file.getName();
+            long contentLength = file.length();
+            String contentType = Files.probeContentType(file.toPath());
 
             PutObjectRequest putRequest = PutObjectRequest.builder()
                     .bucket(properties.getBucket())
                     .key(key)
-                    .contentType(Files.probeContentType(file.toPath()))
+                    .contentType(contentType)
+                    .contentLength(contentLength)
                     .build();
 
             s3MinioClient.putObject(putRequest, RequestBody.fromFile(file));
 
             return UploadedFileDto.builder()
-                    .storageKey(key)
                     .originalFileName(file.getName())
+                    .fileSize(contentLength)
+                    .fileType(contentType)
                     .bucket(properties.getBucket())
+                    .storageKey(key)
                     .build();
         } catch (Exception e) {
             log.error("Failed to upload file to MinIO/S3", e);

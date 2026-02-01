@@ -9,7 +9,6 @@ import lombok.*;
 @NoArgsConstructor
 public class UploadedFileDto {
     private String originalFileName;
-    private String storedFileName;
     private long fileSize;
     private String fileType;
     private String bucket;

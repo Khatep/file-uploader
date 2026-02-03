@@ -11,11 +11,23 @@ import lombok.experimental.FieldDefaults;
 @NoArgsConstructor
 @AllArgsConstructor
 @FieldDefaults(level = AccessLevel.PRIVATE)
-@Table(name = "files_metadata")
+@Table(
+        name = "files_metadata",
+        uniqueConstraints = {
+                @UniqueConstraint(
+                        name = "uk_user_file_hash",
+                        columnNames = {"user_id", "file_hash"}
+                )
+        }
+
+)
 public class FileMetadata {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     Long id;
+
+    @Column(name = "user_id", nullable = false)
+    private Long userId;
 
     @Column(name = "file_name")
     String fileName;
@@ -25,6 +37,9 @@ public class FileMetadata {
 
     @Column(name = "file_type")
     String fileType;
+
+    @Column(name = "file_hash", nullable = false, length = 64)
+    private String fileHash;
 
     @Column(name = "bucket")
     String bucket;

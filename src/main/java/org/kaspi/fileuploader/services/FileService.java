@@ -3,13 +3,17 @@ package org.kaspi.fileuploader.services;
 import io.vavr.control.Try;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.hibernate.exception.ConstraintViolationException;
 import org.kaspi.fileuploader.domain.dto.FileRequestDto;
 import org.kaspi.fileuploader.domain.dto.UploadedFileDto;
+import org.kaspi.fileuploader.domain.exceptions.DuplicateFileException;
 import org.kaspi.fileuploader.domain.models.FileMetadata;
 import org.kaspi.fileuploader.domain.repositories.FilesMetadataRepository;
+import org.kaspi.fileuploader.utils.HashUtils;
 import org.kaspi.fileuploader.utils.TempFileUtils;
 import org.kaspi.fileuploader.utils.mappers.FileMetadataMapper;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -29,42 +33,54 @@ public class FileService {
     private final ObjectProvider<FileService> selfProvider;
 
     public void createAndSave(FileRequestDto dto) {
-        //String userId = userService.findByUsername(dto.getUserId());
-
         try {
             // Сохраняем MultipartFile во временный файл
             File tempFile = TempFileUtils.saveTempFile(dto);
+            String fileHash = HashUtils.sha256(tempFile);
 
             CompletableFuture
                     .supplyAsync(() -> fileStorageService.upload(tempFile), taskExecutor)
-                    .thenAccept(this::saveWithCompensation)
-                    .whenComplete((res, ex) -> {
-                        TempFileUtils.deleteFile(tempFile);
-                        //TODO: KAFKA FOR PUSH
-                    })
+                    .thenAccept((uploadedFileDto) ->
+                             saveWithCompensation(uploadedFileDto, fileHash, dto.getUserId())
+                    )
                     .exceptionally(ex -> {
-                        TempFileUtils.deleteFile(tempFile);
                         log.error("Failed to process proof of address", ex);
                         //TODO: KAFKA for PUSH
                         return null;
+                    })
+                    .whenComplete((res, ex) -> {
+                        TempFileUtils.deleteFile(tempFile);
                     });
         } catch (Exception e) {
             log.error("Failed to process proof of address", e);
         }
     }
 
-    private void saveWithCompensation(UploadedFileDto document) {
-        Try.run(() -> selfProvider.getObject().transactionalSave(document))
+    private void saveWithCompensation(UploadedFileDto document, String fileHash, Long userId) {
+        Try.run(() -> selfProvider.getObject().transactionalSave(document, fileHash, userId))
                 .onFailure(ex -> {
                     fileStorageService.delete(document.getStorageKey());
-                    log.error("DB save failed, file rolled back", ex);
+
+                    if (ex instanceof DuplicateFileException) {
+                        log.info(
+                                "Duplicate file upload prevented: userId={}, hash={}",
+                                userId, fileHash
+                        );
+                    } else {
+                        log.error("DB save failed, file rolled back", ex);
+                    }
                 })
+
                 .get();
     }
 
     @Transactional
-    public void transactionalSave(UploadedFileDto uploadedFileDto) {
-        FileMetadata fileMetadata = FileMetadataMapper.mapToEntity(uploadedFileDto);
-        filesMetadataRepository.save(fileMetadata);
+    public void transactionalSave(UploadedFileDto uploadedFileDto, String fileHash, Long userId) {
+        try {
+            FileMetadata fileMetadata = FileMetadataMapper.mapToEntity(uploadedFileDto, fileHash, userId);
+            filesMetadataRepository.save(fileMetadata);
+        } catch (DataIntegrityViolationException e) {
+                throw new DuplicateFileException(userId, fileHash);
+        }
     }
 }

@@ -3,7 +3,6 @@ package org.kaspi.fileuploader.services;
 import io.vavr.control.Try;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.hibernate.exception.ConstraintViolationException;
 import org.kaspi.fileuploader.domain.dto.FileRequestDto;
 import org.kaspi.fileuploader.domain.dto.UploadedFileDto;
 import org.kaspi.fileuploader.domain.exceptions.DuplicateFileException;
@@ -17,7 +16,6 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.io.File;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
 
@@ -33,27 +31,25 @@ public class FileService {
     private final ObjectProvider<FileService> selfProvider;
 
     public void createAndSave(FileRequestDto dto) {
-        try {
-            // Сохраняем MultipartFile во временный файл
-            File tempFile = TempFileUtils.saveTempFile(dto);
-            String fileHash = HashUtils.sha256(tempFile);
+        Try.of(() -> TempFileUtils.saveTempFile(dto))
+                .andThen(tempFile -> {
+                    String fileHash = HashUtils.sha256(tempFile);
 
-            CompletableFuture
-                    .supplyAsync(() -> fileStorageService.upload(tempFile), taskExecutor)
-                    .thenAccept((uploadedFileDto) ->
-                             saveWithCompensation(uploadedFileDto, fileHash, dto.getUserId())
-                    )
-                    .exceptionally(ex -> {
-                        log.error("Failed to process proof of address", ex);
-                        //TODO: KAFKA for PUSH
-                        return null;
-                    })
-                    .whenComplete((res, ex) -> {
-                        TempFileUtils.deleteFile(tempFile);
-                    });
-        } catch (Exception e) {
-            log.error("Failed to process proof of address", e);
-        }
+                    CompletableFuture
+                            .supplyAsync(() -> fileStorageService.upload(tempFile), taskExecutor)
+                            .thenAccept(uploadedFileDto ->
+                                    saveWithCompensation(uploadedFileDto, fileHash, dto.getUserId())
+                            )
+                            .exceptionally(ex -> {
+                                log.error("Failed to process proof of address", ex);
+                                // TODO: KAFKA PUSH
+                                return null;
+                            })
+                            .whenComplete((res, ex) -> TempFileUtils.deleteFile(tempFile));
+                })
+                .onFailure(ex ->
+                        log.error("Failed to process proof of address", ex)
+                );
     }
 
     private void saveWithCompensation(UploadedFileDto document, String fileHash, Long userId) {
@@ -76,11 +72,14 @@ public class FileService {
 
     @Transactional
     public void transactionalSave(UploadedFileDto uploadedFileDto, String fileHash, Long userId) {
-        try {
-            FileMetadata fileMetadata = FileMetadataMapper.mapToEntity(uploadedFileDto, fileHash, userId);
-            filesMetadataRepository.save(fileMetadata);
-        } catch (DataIntegrityViolationException e) {
-                throw new DuplicateFileException(userId, fileHash);
-        }
+        Try.run(() -> {
+                    FileMetadata fileMetadata = FileMetadataMapper.mapToEntity(uploadedFileDto, fileHash, userId);
+                    filesMetadataRepository.save(fileMetadata);
+                })
+                .recover(DataIntegrityViolationException.class,
+                        ex -> {
+                    throw new DuplicateFileException(userId, fileHash);
+                })
+                .get();
     }
 }

@@ -1,14 +1,14 @@
 spring:
   servlet:
     multipart:
-      max-file-size: 20MB
-      max-request-size: 20MB
+      max-file-size: ${MAX_FILE_SIZE}
+      max-request-size: ${MAX_REQUEST_SIZE}
   application:
     name: file-uploader
   datasource:
-    url: jdbc:postgresql://postgres:5432/fileuploader
-    username: postgres
-    password: postgres123
+    url: ${POSTGRES_URL}
+    username: ${POSTGRES_USER}
+    password: ${POSTGRES_PASSWORD}
     driver-class-name: org.postgresql.Driver
     hikari:
       maximum-pool-size: 10
@@ -29,9 +29,8 @@ spring:
           lob:
             non_contextual_creation: true
 
-
 server:
-  port: 8080
+  port: ${BACKEND_EXTERNAL_PORT}
 
 s3:
   minio:
@@ -39,5 +38,5 @@ s3:
     access-key: ${S3_ACCESS_KEY}
     secret-key: ${S3_SECRET_KEY}
     bucket: ${S3_BUCKET}
-    region: ${S3_REGION}   # ?????????? ??? AWS SDK
+    region: ${S3_REGION}
 
